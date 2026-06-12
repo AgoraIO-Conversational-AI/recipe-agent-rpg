@@ -4,7 +4,7 @@ import mcp_config as cfg  # noqa: E402
 
 def test_build_mcp_servers():
     s = cfg.build_mcp_servers("https://x.ngrok-free.dev/mcp")
-    assert s == [{"name": "time", "endpoint": "https://x.ngrok-free.dev/mcp", "transport": "streamable_http"}]
+    assert s == [{"name": "rpg", "endpoint": "https://x.ngrok-free.dev/mcp", "transport": "streamable_http"}]
 
 def test_build_mcp_servers_custom_name():
     s = cfg.build_mcp_servers("https://x/mcp", name="weather")
