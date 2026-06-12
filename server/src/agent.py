@@ -1,10 +1,10 @@
 """
-Agent — MCP Recipe
+Agent — RPG DM Recipe
 
 High-level API for managing Agora Conversational AI Agents with managed OpenAI
-and MCP tool calling. Agora cloud orchestrates the MCP server — the managed
+and RPG game tool calling. Agora cloud orchestrates the MCP server — the managed
 OpenAI LLM emits a tool call, Agora invokes the separate mcp/ server (public
-MCP_ENDPOINT), returns the result, and the LLM speaks it.
+MCP_ENDPOINT), returns the result, and the Dungeon Master speaks it.
 
 OPENAI_API_KEY is optional — Agora manages the OpenAI key (keyless).
 MCP_ENDPOINT must be PUBLIC — Agora cloud (not this server) calls it.
@@ -21,18 +21,18 @@ from mcp_config import build_mcp_servers
 
 logger = logging.getLogger("uvicorn.error")
 
-AGENT_GREETING = "Hi! Ask me what time it is."
+AGENT_GREETING = "Welcome, adventurer! I'm your Dungeon Master. Choose your class — warrior, mage, rogue, or cleric — and we begin."
 
 
 class Agent:
     """
     High-level wrapper for Agora Conversational AI Agent with managed OpenAI
-    and MCP tool calling.
+    and RPG game tool calling (Dungeon Master).
 
     The managed OpenAI vendor is keyless — Agora handles the API key. When the
-    user asks what time it is, the LLM emits a tool call, Agora invokes the
-    mcp/ server at MCP_ENDPOINT, and the result is returned to the LLM so it
-    can speak the answer.
+    player takes an action, the DM LLM emits a tool call, Agora invokes the
+    mcp/ server at MCP_ENDPOINT, and the game result is returned to the LLM so
+    it can narrate the outcome.
 
     IMPORTANT: MCP_ENDPOINT must be publicly accessible for the Agora
     Conversational AI Engine (cloud) to reach the mcp/ server. For local
@@ -75,7 +75,7 @@ class Agent:
         user_uid: int,
         output_audio_codec: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Start agent with managed OpenAI + MCP tool calling."""
+        """Start RPG DM agent with managed OpenAI + game tool calling."""
         if not channel_name or not str(channel_name).strip():
             raise ValueError("channel_name is required and cannot be empty")
         if agent_uid <= 0:
@@ -89,8 +89,13 @@ class Agent:
             api_key=self.openai_api_key,
             model=self.openai_model,
             system_messages=[{"role": "system", "content": (
-                "You are a helpful voice assistant. When the user asks what time it is, "
-                "you MUST call the get_time tool, then say the time out loud. Do not guess."
+                "You are a dramatic but concise voice Dungeon Master running a fantasy RPG. "
+                "You narrate vividly in 1-3 sentences. CRITICAL: you MUST use the game tools to "
+                "resolve every mechanic and NEVER invent dice rolls, damage, HP, gold, loot, or "
+                "outcomes. Call create_character when the player picks a class; start_encounter to "
+                "begin a fight; attack or cast_spell during combat; flee to escape; get_character "
+                "for stats or inventory. After a tool returns, narrate ONLY what it reported. If the "
+                "player has no character yet, ask them to choose warrior, mage, rogue, or cleric."
             )}],
             mcp_servers=build_mcp_servers(self.mcp_endpoint),
             greeting_message=self.greeting,
@@ -152,7 +157,7 @@ class Agent:
         )
 
         logger.info(
-            "Starting MCP agent channel=%s agent_uid=%s user_uid=%s mcp_endpoint=%s",
+            "Starting RPG DM agent channel=%s agent_uid=%s user_uid=%s mcp_endpoint=%s",
             channel_name,
             agent_uid,
             user_uid,
@@ -163,7 +168,7 @@ class Agent:
             agent_id = await session.start()
         except Exception:
             logger.exception(
-                "Failed to start MCP agent channel=%s agent_uid=%s user_uid=%s",
+                "Failed to start RPG DM agent channel=%s agent_uid=%s user_uid=%s",
                 channel_name,
                 agent_uid,
                 user_uid,
@@ -174,7 +179,7 @@ class Agent:
         self._sessions[agent_id] = session
 
         logger.info(
-            "Started MCP agent agent_id=%s channel=%s",
+            "Started RPG DM agent agent_id=%s channel=%s",
             agent_id,
             channel_name,
         )
