@@ -15,9 +15,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-	title: "MCP Recipe | Agora Conversational AI",
+	title: "RPG Gaming Recipe | Agora Conversational AI",
 	description:
-		"Recipe: Agora orchestrates a tool on a separate MCP server (platform tool calling).",
+		"Recipe: a voice RPG where a managed-LLM Dungeon Master narrates and an MCP server resolves dice and combat.",
 	icons: {
 		icon: [
 			{ url: "/favicon.ico" },

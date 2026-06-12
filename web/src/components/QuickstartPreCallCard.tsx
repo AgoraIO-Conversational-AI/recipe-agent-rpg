@@ -24,11 +24,10 @@ export function QuickstartPreCallCard({
 			}}
 		>
 			<h1 className="text-[28px] font-medium leading-[1.2] text-white">
-				MCP Recipe
+				RPG Gaming
 			</h1>
 			<p className="mt-[14px] text-sm font-medium leading-6 text-muted-foreground">
-				Ask &quot;what time is it?&quot; &mdash; the model calls a tool on a separate MCP
-				server that Agora invokes for you.
+				Choose a class and play a voice RPG &mdash; the Dungeon Master narrates, an MCP game server rolls the dice.
 			</p>
 
 			<Button
