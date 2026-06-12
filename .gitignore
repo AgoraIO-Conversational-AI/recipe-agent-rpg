@@ -31,5 +31,7 @@ web/dist/
 .DS_Store
 Thumbs.db
 
+*.db
+
 # AI/process docs (never publish)
 docs/superpowers/

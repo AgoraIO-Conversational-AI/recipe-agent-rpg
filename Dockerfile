@@ -16,6 +16,7 @@ COPY --chown=app:app mcp/src /app/mcp/src
 COPY --chown=app:app docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+ENV RPG_DB_PATH=/tmp/rpg.db
 USER app
 
 # server.py binds :8000 ($PORT); the MCP server binds :8001 ($MCP_PORT). Both 0.0.0.0.

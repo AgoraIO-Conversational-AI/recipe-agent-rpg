@@ -75,6 +75,14 @@ Deploy `web` (Next.js) and `server` (a reachable FastAPI backend). Set
 The `mcp/` server must be publicly reachable so Agora cloud can call it; deploy
 it separately (or co-hosted) and update `MCP_ENDPOINT` to match.
 
+A multi-process Docker image is published to
+`ghcr.io/AgoraIO-Conversational-AI/recipe-agent-rpg` on `v*` tags. It bundles
+the agent backend (:8000) **and** the MCP server (:8001) in one image. To host
+the single-image demo, expose :8001 publicly and point `MCP_ENDPOINT` at it. A
+local `docker run` still needs a tunnel, because Agora cloud cannot reach
+`localhost`. The bundled mock game server is a development stand-in you replace
+with your own tools.
+
 ## Environment variables
 
 Backend env file: [`server/.env.example`](server/.env.example).
@@ -107,9 +115,8 @@ bun run verify:local     # full local gate: backend compile + web build
 bun run clean            # remove venvs and build artifacts
 ```
 
-Tests run standalone (no Agora cloud needed): `pytest` in `mcp/` (8 tests),
-plus `bun run verify` in `web/`. CI runs them on Linux/macOS/Windows × Python
-3.10 & 3.13.
+Tests run standalone: `pytest` in `server/` and `mcp/`, plus `bun run verify`
+in `web/`. CI runs them on Linux/macOS/Windows × Python 3.10 & 3.13.
 
 ## Architecture
 
@@ -139,6 +146,31 @@ The agent backend owns Agora tokens and agent lifecycle. The **MCP game server**
 is separate because Agora cloud — not the browser — calls it, so it must be
 publicly reachable. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
+## What You Get
+
+- A **voice RPG** where a managed-LLM Dungeon Master narrates the adventure and
+  calls game tools — no UI to click, no state to manage client-side.
+- A managed-LLM DM that narrates and calls **6 self-contained MCP tools**: dice
+  rolling, character creation, combat rounds, spells, fleeing, and inventory reads.
+- **SQLite** backs dice, combat, and inventory in `mcp/` — no external game server
+  or database required.
+- **Zero-key**: OpenAI is Agora-managed and the `mcp/` game engine needs no
+  external credentials. The full pipeline runs locally with only Agora credentials
+  and a public tunnel.
+
+| Tool | When the DM calls it |
+| --- | --- |
+| `create_character(char_class)` | Player picks or changes their class (warrior/mage/rogue/cleric) |
+| `get_character()` | Player asks about their stats, HP, gold, or inventory |
+| `start_encounter()` | Player looks for a fight or the story leads into danger |
+| `attack()` | Player attacks the current enemy |
+| `cast_spell(name)` | Player casts their class spell |
+| `flee()` | Player runs from combat |
+
+Each tool opens its own SQLite connection, resolves the full action (including
+dice rolls and counterattacks), and returns a plain-English result for the DM to
+narrate. No chaining — one player utterance maps to at most one tool call.
+
 ## How It Works
 
 1. The browser calls `/api/get_config`; the backend mints an Agora token.
@@ -157,21 +189,6 @@ publicly reachable. See [ARCHITECTURE.md](./ARCHITECTURE.md).
    in the same way — each tool is **self-contained** (dice rolled inside `game.py`,
    no tool-call chaining).
 7. `/api/stopAgent` ends the session.
-
-## The 6 Game Tools
-
-| Tool | When the DM calls it |
-| --- | --- |
-| `create_character(char_class)` | Player picks or changes their class (warrior/mage/rogue/cleric) |
-| `get_character()` | Player asks about their stats, HP, gold, or inventory |
-| `start_encounter()` | Player looks for a fight or the story leads into danger |
-| `attack()` | Player attacks the current enemy |
-| `cast_spell(name)` | Player casts their class spell |
-| `flee()` | Player runs from combat |
-
-Each tool opens its own SQLite connection, resolves the full action (including
-dice rolls and counterattacks), and returns a plain-English result for the DM to
-narrate. No chaining — one player utterance maps to at most one tool call.
 
 ## Repo Map
 
