@@ -46,10 +46,10 @@ jobs:
         run: |
           IMAGE=$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -n1)
           echo "Smoke-testing $IMAGE"
-          docker run -d --name smoke -p 8000:8000 -p 8001:8001 \
+          docker run -d --name smoke -p 8000:8000 \
             -e AGORA_APP_ID=0123456789abcdef0123456789abcdef \
             -e AGORA_APP_CERTIFICATE=fedcba9876543210fedcba9876543210 \
-            -e MCP_ENDPOINT=http://localhost:8001/mcp \
+            -e MCP_ENDPOINT=http://localhost:8000/mcp \
             -e OPENAI_MODEL=gpt-4o-mini \
             "$IMAGE"
           fail=0
@@ -61,7 +61,7 @@ jobs:
           [ -z "$ok" ] && { echo "FAIL get_config"; fail=1; }
           ok=""
           for i in $(seq 1 20); do
-            if curl -s -o /dev/null http://localhost:8001/mcp; then ok=1; echo "OK mcp listening"; break; fi
+            if curl -s -o /dev/null http://localhost:8000/mcp; then ok=1; echo "OK mcp listening"; break; fi
             sleep 1
           done
           [ -z "$ok" ] && { echo "FAIL mcp listening"; fail=1; }

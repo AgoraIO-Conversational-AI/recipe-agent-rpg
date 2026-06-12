@@ -25,6 +25,19 @@ from pydantic import BaseModel
 from agora_agent.agentkit.token import generate_convo_ai_token
 from agent import Agent
 
+# --- MCP mount (single-process): serve the FastMCP game server in this uvicorn ---
+from contextlib import asynccontextmanager
+import mcp_server  # exposes `mcp = FastMCP(...)`
+
+_mcp_asgi = mcp_server.mcp.streamable_http_app()
+
+
+@asynccontextmanager
+async def _lifespan(_app):
+    async with mcp_server.mcp.session_manager.run():
+        yield
+
+
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -62,6 +75,7 @@ app = FastAPI(
     title="Agora MCP Recipe Service",
     version="1.0.0",
     description="Agora Conversational AI with MCP tool calling",
+    lifespan=_lifespan,
 )
 
 app.add_middleware(
@@ -190,6 +204,10 @@ async def stop_agent(request: StopAgentRequest):
 
 
 app.include_router(router)
+
+# Mount the FastMCP game server in-process (serves its own /mcp path). Agora cloud
+# reaches it at <public-url>/mcp — same process, same port as the token endpoints.
+app.mount("/", _mcp_asgi)
 
 
 if __name__ == "__main__":
