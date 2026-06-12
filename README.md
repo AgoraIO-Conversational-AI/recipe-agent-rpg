@@ -1,30 +1,32 @@
-# Agora Conversational AI — MCP Recipe (Python)
+# Agora Conversational AI — RPG Gaming Recipe (Python)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)](https://www.python.org/)
 [![Bun](https://img.shields.io/badge/bun-latest-black)](https://bun.sh/)
 
-The **mcp** recipe in the Agora Conversational AI recipes family. Agora cloud
-orchestrates a tool on a separate MCP server: the managed keyless OpenAI vendor
-emits a tool call, Agora invokes the `mcp/` FastMCP server (which must be
-publicly reachable), returns the result, and the LLM speaks it. STT (Deepgram)
-and TTS (MiniMax) stay Agora-managed.
+The **RPG gaming** recipe in the Agora Conversational AI recipes family. A voice
+RPG where a managed-LLM **Dungeon Master** narrates the adventure and calls
+**game tools** on a separate FastMCP server. The player speaks; the DM resolves
+every mechanic — dice rolls, combat, loot, inventory — through 6 self-contained
+MCP tools backed by SQLite. STT (Deepgram) and TTS (MiniMax) are Agora-managed.
 
 This recipe is **zero-key**: OpenAI is Agora-managed (no `OPENAI_API_KEY`
-needed), and the `mcp/` tool is a mock (`get_time`) that needs no external
-credentials. Replace it with your own tools.
+needed, though you may supply your own). The `mcp/` server is a self-contained
+game engine with no external credentials. The full pipeline runs locally with
+only Agora credentials and a public tunnel.
 
-**Distinct from `recipe-agent-tool-calling`**: in that recipe the tools run
-inside the `llm/` endpoint. Here Agora orchestrates them on a separate MCP
-server — the `mcp/` service is a standalone FastMCP HTTP server, and Agora
+**Distinct from `recipe-agent-tool-calling`**: in that recipe tools run inside
+the `llm/` endpoint. Here Agora cloud orchestrates them on a **separate MCP
+server** — the `mcp/` service is a standalone FastMCP HTTP server, and Agora
 cloud calls it directly at `MCP_ENDPOINT`.
 
 ## Prerequisites
 
 - [Python 3.10+](https://www.python.org/)
 - [Bun](https://bun.sh/)
-- [Agora CLI](https://github.com/AgoraIO/cli) — makes generating an App ID + App Certificate easy
-- [ngrok](https://ngrok.com/) — the MCP server must be publicly reachable so Agora cloud can call it
+- [Agora CLI](https://github.com/AgoraIO/cli) — generates App ID + Certificate
+- [ngrok](https://ngrok.com/) — the MCP server must be publicly reachable so
+  Agora cloud can call it
 
 ## Run It
 
@@ -48,7 +50,7 @@ bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) → **Start Conversation** →
-ask "what time is it?".
+say "I want to be a warrior" to create your hero, then explore and fight.
 
 ### Working from a clone
 
@@ -62,7 +64,7 @@ Services:
 
 - Frontend — http://localhost:3000
 - Backend — http://localhost:8000
-- MCP server — http://localhost:8001
+- MCP game server — http://localhost:8001
 - API docs — http://localhost:8000/docs
 
 ## Deploy
@@ -70,13 +72,8 @@ Services:
 Deploy `web` (Next.js) and `server` (a reachable FastAPI backend). Set
 `AGENT_BACKEND_URL` in the web deployment so the Next rewrites reach the backend.
 
-A multi-process Docker image is published to
-`ghcr.io/AgoraIO-Conversational-AI/recipe-agent-mcp` on `v*` tags. It bundles
-the agent backend (:8000) **and** the MCP server (:8001) in one image. To host
-the single-image demo, expose :8001 publicly and point `MCP_ENDPOINT` at it. A
-local `docker run` still needs a tunnel, because Agora cloud cannot reach
-`localhost`. The bundled mock MCP server is a development stand-in you replace
-with your own tools.
+The `mcp/` server must be publicly reachable so Agora cloud can call it; deploy
+it separately (or co-hosted) and update `MCP_ENDPOINT` to match.
 
 ## Environment variables
 
@@ -86,12 +83,14 @@ Backend env file: [`server/.env.example`](server/.env.example).
 | --- | :---: | :---: | --- |
 | `AGORA_APP_ID` | Yes | — | Agora Console → Project → App ID |
 | `AGORA_APP_CERTIFICATE` | Yes | — | Agora Console → Project → App Certificate |
-| `MCP_ENDPOINT` | Yes | — | **Public** URL of your `mcp/` server (e.g. `https://<tunnel>/mcp`). Agora cloud calls it; cannot be `localhost`. |
-| `OPENAI_MODEL` | | `gpt-4o-mini` | Model name for the managed OpenAI vendor |
+| `MCP_ENDPOINT` | Yes | — | **Public** URL of the `mcp/` server (e.g. `https://<tunnel>/mcp`). Agora cloud calls it; cannot be `localhost`. |
+| `OPENAI_MODEL` | | `gpt-4o-mini` | Model name for the managed Dungeon Master LLM |
+| `RPG_DB_PATH` | | `rpg.db` | Path to the SQLite database for game state |
+| `RPG_SEED` | | — | Optional integer seed for deterministic dice (useful for testing) |
 | `OPENAI_API_KEY` | | — | Optional — Agora manages the OpenAI key (keyless by default) |
-| `AGENT_GREETING` | | built-in | Optional opening line override |
+| `AGENT_GREETING` | | built-in | Optional override for the DM's opening line |
 | `PORT` | | `8000` | Agent backend port |
-| `MCP_PORT` (mcp/.env.local) | | `8001` | Port for the MCP server |
+| `MCP_PORT` (mcp/.env.local) | | `8001` | Port for the MCP game server |
 | `AGENT_BACKEND_URL` (web deploy) | Yes (deploy) | — | Required when deploying `web` |
 
 ## Commands
@@ -108,7 +107,7 @@ bun run verify:local     # full local gate: backend compile + web build
 bun run clean            # remove venvs and build artifacts
 ```
 
-Tests run standalone (no Agora cloud needed): `pytest` in `server/` and `mcp/`,
+Tests run standalone (no Agora cloud needed): `pytest` in `mcp/` (8 tests),
 plus `bun run verify` in `web/`. CI runs them on Linux/macOS/Windows × Python
 3.10 & 3.13.
 
@@ -119,65 +118,66 @@ Browser (localhost:3000)
   │  fetch /api/*
   ▼
 Next.js  ──rewrite──▶  Agent backend  (server/, localhost:8000)
-                          │  starts agent session (OpenAI vendor + mcp_servers)
+                          │  starts agent session (Dungeon Master LLM + mcp_servers)
                           ▼
                        Agora ConvoAI Cloud
                           │  user speech → Deepgram STT (managed)
-                          │  OpenAI LLM (managed, keyless) → emits tool call
+                          │  Dungeon Master LLM (managed OpenAI, keyless) → emits tool call
                           │  POST <MCP_ENDPOINT>   (streamable-http)
                           ▼
-                       MCP server  (mcp/, localhost:8001)
+                       MCP game server  (mcp/, localhost:8001)
                           ▲  public via ngrok tunnel
-                          │  returns tool result → LLM speaks it
+                          │  resolves dice/combat/inventory → returns result
                           ▼
-                       Agora ConvoAI Cloud → MiniMax TTS (managed) → user hears speech
+                       Agora ConvoAI Cloud → DM narrates outcome
+                                          → MiniMax TTS (managed) → user hears speech
                                           → RTM transcript / metrics → web UI
 ```
 
 The browser only ever calls Next `/api/*`, which rewrites to the agent backend.
-The agent backend owns Agora tokens and agent lifecycle. The **MCP server** is
-separate because Agora cloud — not the browser — calls it, so it must be
+The agent backend owns Agora tokens and agent lifecycle. The **MCP game server**
+is separate because Agora cloud — not the browser — calls it, so it must be
 publicly reachable. See [ARCHITECTURE.md](./ARCHITECTURE.md).
-
-## What You Get
-
-- A **Next.js** web client (:3000) that drives the RTC/RTM lifecycle and only
-  ever calls `/api/*`.
-- A **FastAPI** agent backend (:8000) that owns Agora token generation and the
-  agent session lifecycle.
-- The `/api/get_config` · `/api/startAgent` · `/api/stopAgent` contract between
-  the web client and the backend (Next rewrites, no Route Handlers).
-- Agora-managed keyless OpenAI with `mcp_servers` + `enable_tools` — Agora cloud
-  orchestrates the FastMCP `get_time` tool without any OpenAI API key on your end.
-- A **zero-key mock** MCP server so the full pipeline runs with no LLM API key.
 
 ## How It Works
 
-1. The browser calls `/api/get_config`, which Next rewrites to the backend; the
-   backend mints an Agora token from `AGORA_APP_ID` + `AGORA_APP_CERTIFICATE`.
+1. The browser calls `/api/get_config`; the backend mints an Agora token.
 2. The browser joins the RTC channel, then calls `/api/startAgent`; the backend
    starts an agent session using the managed `OpenAI` vendor with `mcp_servers`
-   pointing at the public `MCP_ENDPOINT`.
-3. The user speaks. Agora runs STT (Deepgram), then sends the transcript to the
-   managed OpenAI LLM.
-4. When the LLM emits a tool call (e.g. `get_time`), Agora cloud issues a
-   streamable-HTTP request to `MCP_ENDPOINT`. The `mcp/` FastMCP server runs the
-   tool and returns the result.
-5. Agora feeds the tool result back to the LLM, which speaks the reply. Agora
-   runs TTS (MiniMax) and plays it back in the channel.
-6. `/api/stopAgent` ends the session.
+   pointing at the public `MCP_ENDPOINT` and `enable_tools: true`.
+3. The user speaks (e.g. "I want to be a warrior"). Agora runs STT (Deepgram)
+   and sends the transcript to the managed Dungeon Master LLM.
+4. The DM decides to call `create_character("warrior")`. Agora cloud issues a
+   streamable-HTTP request to `MCP_ENDPOINT`. The `mcp/` FastMCP server runs
+   the tool (creates the SQLite row, rolls no dice here), and returns a narrative
+   result string.
+5. Agora feeds the tool result back to the DM LLM, which narrates it (e.g.
+   "You are a warrior with 30 HP…"). Agora runs TTS (MiniMax) and plays it back.
+6. Later tools (`start_encounter`, `attack`, `cast_spell`, `flee`) resolve combat
+   in the same way — each tool is **self-contained** (dice rolled inside `game.py`,
+   no tool-call chaining).
+7. `/api/stopAgent` ends the session.
 
-### Replacing the mock
+## The 6 Game Tools
 
-Add tools in [`mcp/src/mcp_server.py`](mcp/src/mcp_server.py). Each function
-decorated with `@mcp.tool()` is automatically registered. The mock `get_time`
-tool needs no external credentials — replace or extend it with your own logic.
+| Tool | When the DM calls it |
+| --- | --- |
+| `create_character(char_class)` | Player picks or changes their class (warrior/mage/rogue/cleric) |
+| `get_character()` | Player asks about their stats, HP, gold, or inventory |
+| `start_encounter()` | Player looks for a fight or the story leads into danger |
+| `attack()` | Player attacks the current enemy |
+| `cast_spell(name)` | Player casts their class spell |
+| `flee()` | Player runs from combat |
+
+Each tool opens its own SQLite connection, resolves the full action (including
+dice rolls and counterattacks), and returns a plain-English result for the DM to
+narrate. No chaining — one player utterance maps to at most one tool call.
 
 ## Repo Map
 
 - `web/` — Next.js frontend (:3000); RTC/RTM lifecycle and UI.
-- `server/` — FastAPI agent backend (:8000); Agora tokens + agent lifecycle, managed OpenAI vendor with `mcp_servers`.
-- `mcp/` — FastMCP streamable-HTTP server (:8001) that Agora cloud calls when the LLM emits a tool call; no `agora-agents` dependency.
+- `server/` — FastAPI agent backend (:8000); Agora tokens + Dungeon Master agent lifecycle.
+- `mcp/` — FastMCP game server (:8001); dice, combat, and inventory in SQLite.
 - `ARCHITECTURE.md` — system shape and component boundaries.
 - `AGENTS.md` — guide for coding agents working in this repo.
 
@@ -185,9 +185,10 @@ tool needs no external credentials — replace or extend it with your own logic.
 
 | Problem | Fix |
 | --- | --- |
-| Agent starts but never responds to "what time is it?" | `MCP_ENDPOINT` is not public or the `/mcp` path is wrong. Use your ngrok URL. |
+| DM greets but never calls a tool | `MCP_ENDPOINT` is not public or the `/mcp` path is wrong. Use your ngrok URL. |
 | `doctor:local` warns about localhost | Replace the local URL with your public tunnel URL. |
 | Local calls fail under a global proxy | Configure the proxy to send `127.0.0.1` and `localhost` DIRECT. |
+| Tests fail with wrong dice outcomes | Set `RPG_SEED` to a fixed integer; the tests already do this automatically. |
 
 ## More Docs
 

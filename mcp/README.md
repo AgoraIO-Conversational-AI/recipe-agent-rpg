@@ -1,19 +1,34 @@
-# MCP Server — recipe-agent-mcp
+# MCP Game Server — recipe-agent-rpg
 
-FastMCP streamable-HTTP server that Agora cloud calls when the managed OpenAI
-LLM emits a tool call. It exposes one mock tool (`get_time`) and is designed to
-be extended with your own tools.
+FastMCP streamable-HTTP server that Agora cloud calls when the managed Dungeon
+Master LLM emits a tool call. It exposes 6 self-contained game tools backed by
+SQLite and is the component you extend to add new game mechanics.
 
 ## What this is
 
-Agora's Conversational AI platform supports MCP (Model Context Protocol) tool
-calling. When you configure `mcp_servers` in the agent's `OpenAI` vendor, Agora
-cloud will POST to `MCP_ENDPOINT` whenever the LLM issues a tool call. This
-server is that endpoint.
+The `mcp/` server is the RPG game engine. When the Dungeon Master decides to
+call a game tool (e.g. `attack()`), Agora cloud POSTs to `MCP_ENDPOINT`. This
+server receives that request, runs the tool (rolling dice, updating SQLite,
+computing loot), and returns a plain-English result for the DM to narrate.
 
 It is intentionally separate from the agent backend (`server/`) because Agora
 cloud — not the browser or the backend — calls it, so it must be publicly
-reachable (e.g. via an ngrok tunnel).
+reachable (e.g. via an ngrok tunnel). It has no `agora-agents` dependency.
+
+## The 6 tools
+
+| Tool | What it does |
+| --- | --- |
+| `create_character(char_class)` | Create/reset hero; `char_class` is warrior, mage, rogue, or cleric |
+| `get_character()` | Return class, HP, gold, inventory, and current mode (narration/combat) |
+| `start_encounter()` | Spawn a random enemy and switch to combat mode |
+| `attack()` | Roll the hero's die, deal damage, enemy counterattacks; handles death + loot |
+| `cast_spell(name)` | Cast the hero's class spell (bonus die); same resolution as attack |
+| `flee()` | Exit combat immediately, clear the enemy, return to narration mode |
+
+Each tool is **self-contained** — dice are rolled inside `game.py`, not by the
+LLM. No tool-call chaining is needed; one player utterance maps to at most one
+tool call.
 
 ## Run (via repo root)
 
@@ -41,24 +56,26 @@ The server listens at `http://0.0.0.0:<MCP_PORT>/mcp`.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `MCP_PORT` | `8001` | Port for the MCP server |
+| `MCP_PORT` | `8001` | Port for the MCP game server |
+| `RPG_DB_PATH` | `rpg.db` | SQLite database path (relative to `mcp/`) |
+| `RPG_SEED` | — | Optional integer for deterministic dice (used by tests) |
 
-No API keys required. The mock `get_time` tool needs no external credentials.
+No external API keys required.
 
-## Replacing the mock
+## Adding tools
 
-Add tools in `mcp/src/mcp_server.py`. Each function decorated with
-`@mcp.tool()` is automatically registered and exposed to Agora cloud:
+Add game functions in `mcp/src/game.py` (pure Python, no MCP import), then
+register them in `mcp/src/mcp_server.py` with `@mcp.tool()`:
 
 ```python
 @mcp.tool()
-def my_tool(param: str) -> str:
-    """Description that the LLM uses to decide when to call this tool."""
-    return do_something(param)
+def my_action() -> str:
+    """Describe when the DM should call this action."""
+    return _run(game.my_action)
 ```
 
-Update the system message in `server/src/agent.py` to tell the LLM when to
-call your new tool.
+Update the system message in `server/src/agent.py` to tell the DM when to use
+the new tool.
 
 ## Tests
 
@@ -67,4 +84,10 @@ cd mcp && source venv/bin/activate
 python -m pytest tests/ -q
 ```
 
-The test imports `current_time_message()` directly — no server process needed.
+8 tests cover all 6 tools plus a persistence test (write on one SQLite
+connection, read on a fresh one). Tests use `RPG_SEED=42` for deterministic
+dice outcomes — set it in your environment if running manually:
+
+```bash
+RPG_SEED=42 python -m pytest tests/ -q
+```
